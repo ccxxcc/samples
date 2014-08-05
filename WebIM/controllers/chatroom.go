@@ -17,10 +17,13 @@ package controllers
 import (
 	"container/list"
 	"time"
-
+    "fmt"
+    "net"
+    "strings"
+    "encoding/json"
 	"github.com/astaxie/beego"
 	"github.com/gorilla/websocket"
-
+    "github.com/garyburd/redigo/redis"
 	"github.com/beego/samples/WebIM/models"
 )
 
@@ -67,9 +70,9 @@ func chatroom() {
 				subscribers.PushBack(sub) // Add user to the end of list.
 				// Publish a JOIN event.
 				publish <- newEvent(models.EVENT_JOIN, sub.Name, "")
-				beego.Info("New user:", sub.Name, ";WebSocket:", sub.Conn != nil)
+				beego.Info("New user c:", sub.Name, ";WebSocket:", sub.Conn != nil)
 			} else {
-				beego.Info("Old user:", sub.Name, ";WebSocket:", sub.Conn != nil)
+				beego.Info("Old user c:", sub.Name, ";WebSocket:", sub.Conn != nil)
 			}
 		case event := <-publish:
 			// Notify waiting list.
@@ -82,7 +85,8 @@ func chatroom() {
 			models.NewArchive(event)
 
 			if event.Type == models.EVENT_MESSAGE {
-				beego.Info("Message from", event.User, ";Content:", event.Content)
+			beego.Info("start test")
+				beego.Info("Message from c:", event.User, ";Content c:", event.Content)
 			}
 		case unsub := <-unsubscribe:
 			for sub := subscribers.Front(); sub != nil; sub = sub.Next() {
@@ -114,3 +118,73 @@ func isUserExist(subscribers *list.List, user string) bool {
 	}
 	return false
 }
+
+func setMsgQueue(uname string,content string) {
+    // 从配置文件获取redis配置并连接
+    host      := beego.AppConfig.String("redis_host")
+    port , _  := beego.AppConfig.Int("redis_port")
+    password  := beego.AppConfig.String("redis_password")
+
+    redispool := NewRedisPool(host, port, password)
+    redisconn := redispool.Get() //获取redis连接
+    
+    qKey := "msg_list"
+    
+    msgA := []string{uname,content}
+
+    aStr , _ := json.Marshal(msgA)
+
+    z, err := redisconn.Do("rpush", qKey, aStr)
+
+    if err != nil {
+         fmt.Println(err)
+         return
+    }
+    beego.Info("set redis",z)
+}
+
+func NewRedisPool(host string, port int, password string) *redis.Pool {
+        server := fmt.Sprintf("%s:%d", host, port)                                          
+                                                                                     
+        return &redis.Pool{                                                          
+                MaxIdle:     3,                                                      
+                IdleTimeout: 240 * time.Second,                                      
+                Dial: func() (redis.Conn, error) {                                   
+                        c, err := redis.Dial("tcp", server)                          
+                        if err != nil {                                              
+                                return nil, err                                      
+                        }                                                            
+                        if _, err := c.Do("AUTH", password); err != nil {            
+                                c.Close()                                            
+                                return nil, err                                      
+                        }                                                            
+                        return c, err                                                
+                },                                                                   
+                TestOnBorrow: func(c redis.Conn, t time.Time) error {                
+                        _, err := c.Do("PING")                                       
+                        return err                                                   
+                },                                                                   
+        }                                                                            
+}
+
+//获取本地IP                                                                         
+func  GetLocalIP(ippart string) string {                              
+                                                                                     
+        localip := "-"                                                               
+                                                                                     
+        addrs, err := net.InterfaceAddrs()                                           
+        if err != nil {                                                              
+                beego.Error(fmt.Sprintf("get ip error:", err.Error()))                  
+                return "-"                                                           
+        }                                                                            
+        for _, addr := range addrs {                                                 
+                ip := strings.Split(addr.String(), "/")[0]                                                                                         
+                if index := strings.Index(ip, ippart); index != -1 {                 
+                        localip = ip                                                 
+                        break                                                        
+                }                                                                    
+        }                                                                            
+                                                                                     
+        return localip                                                               
+}
+

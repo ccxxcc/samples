@@ -15,7 +15,11 @@
 package controllers
 
 import (
+    "github.com/astaxie/beego"
 	"github.com/beego/samples/WebIM/models"
+	// "encoding/json"
+	//"fmt"
+	//"time"
 )
 
 // LongPollingController handles long polling requests.
@@ -31,6 +35,10 @@ func (this *LongPollingController) Join() {
 		this.Redirect("/", 302)
 		return
 	}
+	
+	server_ip := GetLocalIP("10.23");
+	
+	beego.Info("ip",server_ip)
 
 	// Join chat room.
 	Join(uname, nil)
@@ -42,6 +50,7 @@ func (this *LongPollingController) Join() {
 
 // Post method handles receive messages requests for LongPollingController.
 func (this *LongPollingController) Post() {
+
 	this.TplNames = "longpolling.html"
 
 	uname := this.GetString("uname")
@@ -49,8 +58,15 @@ func (this *LongPollingController) Post() {
 	if len(uname) == 0 || len(content) == 0 {
 		return
 	}
+	
+	beego.Info("start redis",content)
+   
 
+	//content和uname写入redis
+	setMsgQueue(uname,content)
+	
 	publish <- newEvent(models.EVENT_MESSAGE, uname, content)
+	
 }
 
 // Fetch method handles fetch archives requests for LongPollingController.
@@ -75,3 +91,5 @@ func (this *LongPollingController) Fetch() {
 	this.Data["json"] = models.GetEvents(int(lastReceived))
 	this.ServeJson()
 }
+
+

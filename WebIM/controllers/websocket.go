@@ -15,9 +15,8 @@
 package controllers
 
 import (
-	"encoding/json"
+    "encoding/json"
 	"net/http"
-
 	"github.com/astaxie/beego"
 	"github.com/gorilla/websocket"
 
@@ -60,7 +59,11 @@ func (this *WebSocketController) Join() {
 		beego.Error("Cannot setup WebSocket connection:", err)
 		return
 	}
-
+	
+	server_ip := GetLocalIP("10.23");
+	
+	beego.Info("ip",server_ip)
+	
 	// Join chat room.
 	Join(uname, ws)
 	defer Leave(uname)
@@ -68,10 +71,23 @@ func (this *WebSocketController) Join() {
 	// Message receive loop.
 	for {
 		_, p, err := ws.ReadMessage()
+		
 		if err != nil {
 			return
 		}
-		publish <- newEvent(models.EVENT_MESSAGE, uname, string(p))
+		
+	    if len(p) == 0  {
+	    
+	       return
+	
+	    }
+	    
+	    content := string(p)
+	
+	    
+        setMsgQueue(uname,content)
+	    
+		publish <- newEvent(models.EVENT_MESSAGE, uname, content)
 	}
 }
 
